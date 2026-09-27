@@ -111,6 +111,8 @@ class DisplayPower:
         self.ok = False
         self.ending = threading.Event()
         self.dark = threading.Event()
+        self.suspended = threading.Event()   # PC going to sleep/hibernate until resume
+        self.on_suspend = []                 # callbacks run synchronously on PBT_APMSUSPEND (keep them short)
         threading.Thread(target=self._run, name="displaypower", daemon=True).start()
 
     @property
@@ -138,6 +140,16 @@ class DisplayPower:
                         if new != self.state:
                             log(f"display power: {['off', 'on', 'dimmed'][new] if new < 3 else new}")
                         self.state = new
+                elif msg == 0x0218 and wp == 0x0004:       # PBT_APMSUSPEND: act now, Windows sleeps right after
+                    self.suspended.set(); log("system suspend")
+                    for f in list(self.on_suspend):
+                        try:
+                            f()
+                        except Exception as e:
+                            log(f"suspend callback failed: {e}")
+                elif msg == 0x0218 and wp in (0x0007, 0x0012):   # PBT_APMRESUMESUSPEND / PBT_APMRESUMEAUTOMATIC
+                    if self.suspended.is_set():
+                        self.suspended.clear(); log("system resume")
                 elif msg == 0x0011 and not (lp & 0x1):  # WM_QUERYENDSESSION (not ENDSESSION_CLOSEAPP): start turning off now
                     self.dark.clear(); self.ending.set()
                     return 1
@@ -245,7 +257,10 @@ def main():
 
     try:    # Gigabyte mobo RGB (048D:5711) on/off without GCC; off unless config "mobo.enabled"
         import mobo_led
-        mobo_led.MoboLed(log, lambda: files.cfg)
+        def _mobo_dark():     # PC sleep, monitors off, or Windows session ending (not the lock screen)
+            return display.suspended.is_set() or display.ending.is_set() or display.off
+        _mobo = mobo_led.MoboLed(log, lambda: files.cfg, _mobo_dark)
+        display.on_suspend.append(_mobo.suspend_now)
     except Exception as e:
         log(f"mobo RGB failed to start: {e}")
 

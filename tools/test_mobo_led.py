@@ -58,6 +58,11 @@ assert m.wanted({"enabled": False}) is None
 assert m.wanted({"enabled": True, "on": False}) == ("off", (255, 255, 255), 0, 5)        # 09-28 config shape
 assert m.wanted({"enabled": True, "effect": "bogus"})[0] == "off"                         # unknown -> off, never guess
 assert m.wanted({"enabled": True, "effect": "pulse", "color": [1, 2], "brightness": 3, "speed": 9}) == ("pulse", (255, 255, 255), 3, 9)
+assert m.wanted({"enabled": True, "effect": "static"}, dark=True) == ("off", (0, 0, 0), 0, 0)          # sleep -> off
+assert m.wanted({"enabled": True, "effect": "static", "off_when_dark": False}, dark=True)[0] == "static"
+assert m.wanted({"enabled": True, "effect": "static"}, dark=False)[0] == "static"                        # wake -> back on
+assert m.wanted({"enabled": False}, dark=True) is None
+assert m.effect_packet(*m.wanted({"enabled": True, "effect": "pulse"}, dark=True)) == m.effect_packet("off")
 assert m.STRIPS_BUILTIN[:3] == [0xCC, 0x32, 0x00] and len(m.STRIPS_BUILTIN) == 64
 assert m.APPLY_ALL[:4] == [0xCC, 0x28, 0xFF, 0x07] and len(m.APPLY_ALL) == 64
 try:

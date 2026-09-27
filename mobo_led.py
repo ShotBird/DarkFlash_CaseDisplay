@@ -15,8 +15,10 @@ unknown), ARGB software effects (GCC drives them from a thread), wave/scene/beat
 
 config.json "mobo": {"enabled": true = CaseDisplay owns the board (false = leave it to GCC),
                      "effect": off|static|pulse|flash|dflash|cycle, "color": [r,g,b],
-                     "brightness": 0-8 (GCC level; 0 = GCC Min), "speed": 0-9 (0 = slowest)}
+                     "brightness": 0-8 (GCC level; 0 = GCC Min), "speed": 0-9 (0 = slowest),
+                     "off_when_dark": true = off while the PC sleeps / monitors are off, effect back on wake}
 The controller keeps an effect on its own, so it is sent only on change, at start, and after the PC wakes up.
+PC sleep: casedisplay calls suspend_now() from PBT_APMSUSPEND so the board is dark before Windows suspends.
 """
 import threading, time
 import hid
@@ -96,10 +98,12 @@ def apply(effect, color=(255, 255, 255), brightness=0, speed=5):
         d.close()
 
 
-def wanted(cfg):
-    """config 'mobo' -> (effect, color, brightness, speed); None = not ours."""
+def wanted(cfg, dark=False):
+    """config 'mobo' -> (effect, color, brightness, speed); None = not ours. dark = sleep / monitors off."""
     if not cfg.get("enabled", False):
         return None
+    if dark and cfg.get("off_when_dark", True):
+        return ("off", (0, 0, 0), 0, 0)
     eff = cfg.get("effect") or ("static" if cfg.get("on", True) else "off")    # 09-28 'on' key still read
     if eff not in EFFECTS:
         eff = "off"
@@ -111,9 +115,22 @@ def wanted(cfg):
 class MoboLed:
     """Checks config every 2 s; sends on change, and again after a wall-clock gap (sleep/hibernate)."""
 
-    def __init__(self, log, get_cfg):
-        self.log, self.get_cfg, self.last, self.stop = log, get_cfg, None, threading.Event()
+    def __init__(self, log, get_cfg, is_dark=lambda: False):
+        self.log, self.get_cfg, self.is_dark, self.last = log, get_cfg, is_dark, None
+        self.stop, self.lock = threading.Event(), threading.Lock()
         threading.Thread(target=self._run, name="mobo_led", daemon=True).start()
+
+    def _send(self, want):
+        with self.lock:
+            fw = apply(*want)
+            self.last = want
+        self.log(f"mobo RGB {want[0]} color={list(want[1])} level={want[2]} speed={want[3]} ({fw})")
+
+    def suspend_now(self):
+        """Called on the power-watch thread right before Windows sleeps: turn off at once."""
+        want = wanted((self.get_cfg() or {}).get("mobo", {}), dark=True)
+        if want is not None and want != self.last:
+            self._send(want)
 
     def _run(self):
         tick = time.time()
@@ -122,14 +139,12 @@ class MoboLed:
             if now - tick > 15 and self.last is not None:
                 self.log("mobo RGB: wake-up detected - resend"); self.last = None
             tick = now
-            want = wanted((self.get_cfg() or {}).get("mobo", {}))
+            want = wanted((self.get_cfg() or {}).get("mobo", {}), dark=bool(self.is_dark()))
             if want is None:
                 self.last = None
             elif want != self.last:
                 try:
-                    fw = apply(*want)
-                    self.last = want
-                    self.log(f"mobo RGB {want[0]} color={list(want[1])} level={want[2]} speed={want[3]} ({fw})")
+                    self._send(want)
                 except Exception as e:
                     self.log(f"mobo RGB error: {e} - retry in 10s")
                     self.stop.wait(10); continue
