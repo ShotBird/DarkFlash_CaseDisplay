@@ -182,6 +182,17 @@ class Handler(BaseHTTPRequestHandler):
                     if int(new.get("rotate", 270)) not in (0, 90, 180, 270):
                         return self._send(400, {"error": "rotate must be 0/90/180/270"})
                     new["interval_seconds"] = max(0.5, float(new.get("interval_seconds", 2)))
+                    rc = req["config"].get("cooler")
+                    if isinstance(rc, dict):    # cooler LED: merge only known keys, keep timing keys from the file
+                        cl = dict(cfg.get("cooler") or {})
+                        cl["enabled"] = bool(rc.get("enabled", cl.get("enabled", False)))
+                        if rc.get("source") in theme_render.SOURCES:
+                            cl["source"] = rc["source"]
+                        cl["icons"] = [i for i in rc.get("icons", cl.get("icons", [])) if i in ("cpu", "gpu", "c", "f", "pct", "logo")]
+                        col = rc.get("color")
+                        if isinstance(col, list) and len(col) == 3:
+                            cl["color"] = [max(0, min(255, int(v))) for v in col]
+                        new["cooler"] = cl
                     _write_json(CFG, new)
                     cfg = new
                 theme = req.get("theme")

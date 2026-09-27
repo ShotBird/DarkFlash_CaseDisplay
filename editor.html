@@ -105,6 +105,22 @@
       <div class="row"><label>모니터 절전 시 끄기</label><input type="checkbox" id="offDisplay"></div>
     </section>
     <section>
+      <h2>수냉쿨러 LED</h2>
+      <div class="row"><label>켜기</label><input type="checkbox" id="clOn"></div>
+      <div class="row"><label>표시 값</label><select id="clSrc">
+        <option>CPU Temperature</option><option>CPU Usage</option><option>CPU Power</option>
+        <option>GPU Temperature</option><option>GPU Hot Spot</option><option>GPU Usage</option><option>GPU Power</option>
+        <option>Memory Usage</option></select></div>
+      <div class="row"><label>아이콘</label><span>
+        <label><input type="checkbox" class="clIc" value="cpu"> CPU</label>
+        <label><input type="checkbox" class="clIc" value="gpu"> GPU</label>
+        <label><input type="checkbox" class="clIc" value="c"> °C</label>
+        <label><input type="checkbox" class="clIc" value="f"> °F</label>
+        <label><input type="checkbox" class="clIc" value="pct"> %</label>
+        <label><input type="checkbox" class="clIc" value="logo"> 로고</label></span></div>
+      <div class="row"><label>색</label><input type="color" id="clColor"></div>
+    </section>
+    <section>
       <h2>설정 기록</h2>
       <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
         <input type="text" id="recName" placeholder="기록 이름 (예: 게임용, 밤 모드)">
@@ -189,6 +205,10 @@ async function load() {
   $("#interval").value = c.interval_seconds ?? 2;
   $("#offLocked").checked = c.off_when_locked !== false;
   $("#offDisplay").checked = c.off_when_display_off !== false;
+  const cl = c.cooler || {};
+  $("#clOn").checked = !!cl.enabled; $("#clSrc").value = cl.source || "CPU Temperature";
+  const ic = cl.icons || ["cpu", "c"]; document.querySelectorAll(".clIc").forEach(x => x.checked = ic.includes(x.value));
+  const rgb = cl.color || [255, 255, 255]; $("#clColor").value = "#" + rgb.map(v => (+v).toString(16).padStart(2, "0")).join("");
   sel = null; dirty = false; HIST.undo.length = 0; HIST.redo.length = 0; lastEdit = { key: null, t: 0 }; updHistBtns();
   renderList(); renderProps(); await render(); loadRecords();
   status("불러옴");
@@ -404,7 +424,10 @@ function removeSel() {
 
 // ---------- save ----------
 const currentConfig = () => ({ brightness: +$("#brightness").value, rotate: +$("#rotate").value, interval_seconds: +$("#interval").value,
-                               off_when_locked: $("#offLocked").checked, off_when_display_off: $("#offDisplay").checked });
+                               off_when_locked: $("#offLocked").checked, off_when_display_off: $("#offDisplay").checked,
+                               cooler: { enabled: $("#clOn").checked, source: $("#clSrc").value,
+                                         icons: [...document.querySelectorAll(".clIc")].filter(x => x.checked).map(x => x.value),
+                                         color: [1, 3, 5].map(i => parseInt($("#clColor").value.substr(i, 2), 16)) } });
 async function save() {
   status("저장 중…");
   const r = await fetch("/api/save", { method: "POST", body: JSON.stringify({ config: currentConfig(), theme: S.theme }) });
@@ -517,7 +540,8 @@ document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => newWidget
 $("#undo").onclick = undo; $("#redo").onclick = redo; $("#save").onclick = save;
 $("#reload").onclick = () => { if (!dirty || confirm("저장하지 않은 변경을 버릴까요?")) load(); };
 $("#brightness").oninput = () => { $("#bVal").textContent = $("#brightness").value; markDirty(); };
-["#rotate", "#interval", "#offLocked", "#offDisplay"].forEach(s => $(s).onchange = markDirty);
+["#rotate", "#interval", "#offLocked", "#offDisplay", "#clOn", "#clSrc", "#clColor"].forEach(s => $(s).onchange = markDirty);
+document.querySelectorAll(".clIc").forEach(x => x.onchange = markDirty);
 $("#fileBg").onchange = (e) => { const f = e.target.files[0]; if (f) openCrop(f); e.target.value = ""; };
 document.addEventListener("keydown", (e) => {
   if ($("#cropDlg").classList.contains("open")) { if (e.key === "Escape") $("#cropDlg").classList.remove("open"); return; }
