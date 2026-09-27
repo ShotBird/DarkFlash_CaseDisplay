@@ -33,6 +33,7 @@
    255
   ],
   "brightness": 0,
-  "speed": 5
+  "speed": 5,
+  "off_when_dark": true
  }
 }

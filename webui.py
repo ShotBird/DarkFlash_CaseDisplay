@@ -198,6 +198,7 @@ class Handler(BaseHTTPRequestHandler):
                         mb = dict(cfg.get("mobo") or {})
                         mb.pop("on", None)
                         mb["enabled"] = bool(rm.get("enabled", mb.get("enabled", False)))
+                        mb["off_when_dark"] = bool(rm.get("off_when_dark", mb.get("off_when_dark", True)))
                         if rm.get("effect") in ("off", "static", "pulse", "flash", "dflash", "cycle"):
                             mb["effect"] = rm["effect"]
                         col = rm.get("color")
