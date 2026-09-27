@@ -193,6 +193,21 @@ class Handler(BaseHTTPRequestHandler):
                         if isinstance(col, list) and len(col) == 3:
                             cl["color"] = [max(0, min(255, int(v))) for v in col]
                         new["cooler"] = cl
+                    rm = req["config"].get("mobo")
+                    if isinstance(rm, dict):    # mobo RGB: merge only known keys, values clamped (mobo_led.py)
+                        mb = dict(cfg.get("mobo") or {})
+                        mb.pop("on", None)
+                        mb["enabled"] = bool(rm.get("enabled", mb.get("enabled", False)))
+                        if rm.get("effect") in ("off", "static", "pulse", "flash", "dflash", "cycle"):
+                            mb["effect"] = rm["effect"]
+                        col = rm.get("color")
+                        if isinstance(col, list) and len(col) == 3:
+                            mb["color"] = [max(0, min(255, int(v))) for v in col]
+                        if "brightness" in rm:
+                            mb["brightness"] = max(0, min(8, int(rm["brightness"])))
+                        if "speed" in rm:
+                            mb["speed"] = max(0, min(9, int(rm["speed"])))
+                        new["mobo"] = mb
                     _write_json(CFG, new)
                     cfg = new
                 theme = req.get("theme")

@@ -26,12 +26,13 @@
  },
  "mobo": {
   "enabled": true,
-  "on": false,
+  "effect": "off",
   "color": [
    255,
    255,
    255
   ],
-  "brightness": 255
+  "brightness": 0,
+  "speed": 5
  }
 }

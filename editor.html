@@ -121,6 +121,16 @@
       <div class="row"><label>색</label><input type="color" id="clColor"></div>
     </section>
     <section>
+      <h2>메인보드 RGB</h2>
+      <div class="row"><label>CaseDisplay가 제어</label><input type="checkbox" id="mbOn"></div>
+      <div class="row"><label>효과</label><select id="mbEff">
+        <option value="off">끄기</option><option value="static">고정</option><option value="pulse">숨쉬기</option>
+        <option value="flash">깜빡임</option><option value="dflash">이중 깜빡임</option><option value="cycle">색 순환</option></select></div>
+      <div class="row"><label>색</label><input type="color" id="mbColor"></div>
+      <div class="row"><label>밝기 (0=Min)</label><input type="range" id="mbBri" min="0" max="8" step="1"><span id="mbBriVal"></span></div>
+      <div class="row"><label>속도 (0=느림)</label><input type="range" id="mbSp" min="0" max="9" step="1"><span id="mbSpVal"></span></div>
+    </section>
+    <section>
       <h2>설정 기록</h2>
       <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
         <input type="text" id="recName" placeholder="기록 이름 (예: 게임용, 밤 모드)">
@@ -209,6 +219,11 @@ async function load() {
   $("#clOn").checked = !!cl.enabled; $("#clSrc").value = cl.source || "CPU Temperature";
   const ic = cl.icons || ["cpu", "c"]; document.querySelectorAll(".clIc").forEach(x => x.checked = ic.includes(x.value));
   const rgb = cl.color || [255, 255, 255]; $("#clColor").value = "#" + rgb.map(v => (+v).toString(16).padStart(2, "0")).join("");
+  const mb = c.mobo || {};
+  $("#mbOn").checked = !!mb.enabled; $("#mbEff").value = mb.effect || (mb.on === false ? "off" : "static");
+  const mrgb = mb.color || [255, 255, 255]; $("#mbColor").value = "#" + mrgb.map(v => (+v).toString(16).padStart(2, "0")).join("");
+  $("#mbBri").value = mb.brightness ?? 0; $("#mbBriVal").textContent = $("#mbBri").value;
+  $("#mbSp").value = mb.speed ?? 5; $("#mbSpVal").textContent = $("#mbSp").value;
   sel = null; dirty = false; HIST.undo.length = 0; HIST.redo.length = 0; lastEdit = { key: null, t: 0 }; updHistBtns();
   renderList(); renderProps(); await render(); loadRecords();
   status("불러옴");
@@ -427,7 +442,10 @@ const currentConfig = () => ({ brightness: +$("#brightness").value, rotate: +$("
                                off_when_locked: $("#offLocked").checked, off_when_display_off: $("#offDisplay").checked,
                                cooler: { enabled: $("#clOn").checked, source: $("#clSrc").value,
                                          icons: [...document.querySelectorAll(".clIc")].filter(x => x.checked).map(x => x.value),
-                                         color: [1, 3, 5].map(i => parseInt($("#clColor").value.substr(i, 2), 16)) } });
+                                         color: [1, 3, 5].map(i => parseInt($("#clColor").value.substr(i, 2), 16)) },
+                               mobo: { enabled: $("#mbOn").checked, effect: $("#mbEff").value,
+                                       color: [1, 3, 5].map(i => parseInt($("#mbColor").value.substr(i, 2), 16)),
+                                       brightness: +$("#mbBri").value, speed: +$("#mbSp").value } });
 async function save() {
   status("저장 중…");
   const r = await fetch("/api/save", { method: "POST", body: JSON.stringify({ config: currentConfig(), theme: S.theme }) });
@@ -540,7 +558,9 @@ document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => newWidget
 $("#undo").onclick = undo; $("#redo").onclick = redo; $("#save").onclick = save;
 $("#reload").onclick = () => { if (!dirty || confirm("저장하지 않은 변경을 버릴까요?")) load(); };
 $("#brightness").oninput = () => { $("#bVal").textContent = $("#brightness").value; markDirty(); };
-["#rotate", "#interval", "#offLocked", "#offDisplay", "#clOn", "#clSrc", "#clColor"].forEach(s => $(s).onchange = markDirty);
+["#rotate", "#interval", "#offLocked", "#offDisplay", "#clOn", "#clSrc", "#clColor", "#mbOn", "#mbEff", "#mbColor"].forEach(s => $(s).onchange = markDirty);
+$("#mbBri").oninput = () => { $("#mbBriVal").textContent = $("#mbBri").value; markDirty(); };
+$("#mbSp").oninput = () => { $("#mbSpVal").textContent = $("#mbSp").value; markDirty(); };
 document.querySelectorAll(".clIc").forEach(x => x.onchange = markDirty);
 $("#fileBg").onchange = (e) => { const f = e.target.files[0]; if (f) openCrop(f); e.target.value = ""; };
 document.addEventListener("keydown", (e) => {
