@@ -10,11 +10,28 @@
  "off_when_locked": true,
  "off_when_display_off": true,
  "cooler": {
-  "enabled": true,
+  "enabled": false,
   "source": "CPU Temperature",
-  "icons": ["cpu", "c"],
-  "color": [255, 255, 255],
+  "icons": [
+   "cpu",
+   "c"
+  ],
+  "color": [
+   255,
+   255,
+   255
+  ],
   "interval_seconds": 0.5,
   "read_seconds": 1.0
+ },
+ "mobo": {
+  "enabled": true,
+  "on": false,
+  "color": [
+   255,
+   255,
+   255
+  ],
+  "brightness": 255
  }
 }

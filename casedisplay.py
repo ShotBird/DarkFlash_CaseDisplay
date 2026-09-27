@@ -243,6 +243,12 @@ def main():
     except Exception as e:
         log(f"cooler LED failed to start: {e}")
 
+    try:    # Gigabyte mobo RGB (048D:5711) on/off without GCC; off unless config "mobo.enabled"
+        import mobo_led
+        mobo_led.MoboLed(log, lambda: files.cfg)
+    except Exception as e:
+        log(f"mobo RGB failed to start: {e}")
+
     applied = {}               # brightness/rotate currently applied on device
     screen_on = False
     ended = False              # screen turned off for Windows session end
