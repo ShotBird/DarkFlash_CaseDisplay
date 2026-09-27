@@ -230,6 +230,18 @@ def main():
         webui.start(log)
     except Exception as e:
         log(f"settings editor failed to start: {e}")
+    try:    # Thermalright cooler LED (0416:8001), replaces TRCC; own thread, off unless config "cooler.enabled"
+        import cooler_led
+        def _cooler_dark():
+            c = files.cfg
+            return (display.ending.is_set() or (c.get("off_when_display_off", True) and display.off)
+                    or (c.get("off_when_locked", True) and session_locked()))
+        def _cooler_value(source):
+            snap = theme_render.read_sensors(files.cfg.get("lhm_url", "http://localhost:8085/data.json"))
+            return snap.value(source)[0]
+        cooler_led.CoolerLed(log, lambda: files.cfg, _cooler_dark, _cooler_value)
+    except Exception as e:
+        log(f"cooler LED failed to start: {e}")
 
     applied = {}               # brightness/rotate currently applied on device
     screen_on = False

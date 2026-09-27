@@ -8,5 +8,13 @@
  "jpeg_max_bytes": 140000,
  "lhm_url": "http://localhost:8085/data.json",
  "off_when_locked": true,
- "off_when_display_off": true
+ "off_when_display_off": true,
+ "cooler": {
+  "enabled": true,
+  "source": "CPU Temperature",
+  "icons": ["cpu", "c"],
+  "color": [255, 255, 255],
+  "interval_seconds": 0.5,
+  "read_seconds": 1.0
+ }
 }
