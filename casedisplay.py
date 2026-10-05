@@ -113,6 +113,8 @@ class DisplayPower:
         self.dark = threading.Event()
         self.suspended = threading.Event()   # PC going to sleep/hibernate until resume
         self.on_suspend = []                 # callbacks run synchronously on PBT_APMSUSPEND (keep them short)
+        self.locked = False                  # WTS lock/unlock event (instant, no polling)
+        self.on_session = []                 # callbacks on lock/unlock and monitor on/off (keep them short)
         threading.Thread(target=self._run, name="displaypower", daemon=True).start()
 
     @property
@@ -137,9 +139,18 @@ class DisplayPower:
                     s = ctypes.cast(lp, ctypes.POINTER(_PBS)).contents
                     if bytes(s.PowerSetting) == target:
                         new = s.Data[0]
-                        if new != self.state:
+                        changed = new != self.state
+                        if changed:
                             log(f"display power: {['off', 'on', 'dimmed'][new] if new < 3 else new}")
                         self.state = new
+                        if changed:
+                            for f in list(self.on_session):
+                                f()
+                elif msg == 0x02B1 and wp in (7, 8):       # WM_WTSSESSION_CHANGE: WTS_SESSION_LOCK / UNLOCK
+                    self.locked = wp == 7
+                    log("session lock event" if self.locked else "session unlock event")
+                    for f in list(self.on_session):
+                        f()
                 elif msg == 0x0218 and wp == 0x0004:       # PBT_APMSUSPEND: act now, Windows sleeps right after
                     self.suspended.set(); log("system suspend")
                     for f in list(self.on_suspend):
@@ -172,6 +183,8 @@ class DisplayPower:
             if not hwnd or not u.RegisterPowerSettingNotification(hwnd, ctypes.byref(g), 0):
                 log("display power watch unavailable"); return
             self.ok = True
+            if not ctypes.windll.wtsapi32.WTSRegisterSessionNotification(hwnd, 0):   # NOTIFY_FOR_THIS_SESSION
+                log("lock event watch unavailable")
             msg = wintypes.MSG()
             while u.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 u.TranslateMessage(ctypes.byref(msg)); u.DispatchMessageW(ctypes.byref(msg))
@@ -258,11 +271,27 @@ def main():
     try:    # Gigabyte mobo RGB (048D:5711) on/off without GCC; off unless config "mobo.enabled"
         import mobo_led
         def _mobo_dark():     # PC sleep, monitors off, or Windows session ending (not the lock screen)
-            return display.suspended.is_set() or display.ending.is_set() or display.off
+            c = files.cfg     # 09-29: lock also turns the board off, same as cooler / case screen
+            return (display.suspended.is_set() or display.ending.is_set() or display.off
+                    or (c.get("off_when_locked", True) and (display.locked or session_locked())))
         _mobo = mobo_led.MoboLed(log, lambda: files.cfg, _mobo_dark)
         display.on_suspend.append(_mobo.suspend_now)
+        display.on_session.append(_mobo.burst)
     except Exception as e:
         log(f"mobo RGB failed to start: {e}")
+        _mobo = None
+
+    wake = threading.Event()   # set by the editor's 적용 button: reload config/theme now
+    try:
+        def _on_saved():
+            files.refresh()
+            if _mobo:
+                _mobo.poke()
+            wake.set()
+        if webui:
+            webui.ON_SAVED.append(_on_saved)
+    except Exception as e:
+        log(f"save hook failed: {e}")
 
     applied = {}               # brightness/rotate currently applied on device
     screen_on = False
@@ -375,7 +404,11 @@ def main():
             lcd.close(); screen_on = False; time.sleep(5)
 
         elapsed = time.time() - loop_start
-        display.ending.wait(max(0.2, float(files.cfg.get("interval_seconds", 2)) - elapsed))   # wake at once on session end
+        end_at = time.time() + max(0.2, float(files.cfg.get("interval_seconds", 2)) - elapsed)
+        while not display.ending.is_set() and time.time() < end_at:   # wake at once on session end or 적용
+            if wake.wait(min(0.2, max(0.0, end_at - time.time()))):
+                break
+        wake.clear()
 
     lcd.close()
 

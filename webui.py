@@ -8,6 +8,8 @@ from PIL import Image, ImageOps
 import fonts
 import theme_render
 
+ON_SAVED = []    # callbacks run right after /api/save wrote the files (set by casedisplay)
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 CFG = os.path.join(BASE, "config.json")
 PORT = 8765
@@ -222,6 +224,11 @@ class Handler(BaseHTTPRequestHandler):
                 _record(_records_dir("history", cfg), time.strftime("%Y%m%d_%H%M%S"), "", cfg, theme)
                 _prune(_records_dir("history", cfg), HISTORY_KEEP)
                 gc_backgrounds()
+                for fn in ON_SAVED:          # casedisplay: apply now instead of waiting for the 2 s poll
+                    try:
+                        fn()
+                    except Exception:
+                        pass
                 return self._send(200, {"ok": True})
 
             if u.path == "/api/background":

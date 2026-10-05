@@ -87,7 +87,7 @@
   <span class="sep"></span>
   <label class="btn" for="fileBg">배경 이미지 변경</label><input type="file" id="fileBg" accept="image/*">
   <button id="reload">다시 불러오기</button>
-  <button id="save" class="primary">저장 (케이스 화면 적용)</button>
+  <button id="save" class="primary">적용</button>
   <span id="status">불러오는 중…</span>
 </header>
 <main>
@@ -139,7 +139,7 @@
       </div>
       <div class="rec-tabs">
         <button id="tabPresets" class="tab on">이름 붙인 기록</button>
-        <button id="tabHistory" class="tab">자동 기록 (저장할 때마다)</button>
+        <button id="tabHistory" class="tab">자동 기록 (적용할 때마다)</button>
       </div>
       <div id="reclist"></div>
     </section>
@@ -257,7 +257,7 @@ function drawBoxes() {
   }
 }
 const markSelectedBoxes = () => document.querySelectorAll("#stage .box").forEach(b => b.classList.toggle("sel", b.dataset.id === sel));
-function markDirty() { dirty = true; status("저장 안 됨"); }
+function markDirty() { dirty = true; status("적용 안 됨"); }
 
 // ---------- drag ----------
 function startDrag(e) {
@@ -448,10 +448,10 @@ const currentConfig = () => ({ brightness: +$("#brightness").value, rotate: +$("
                                        color: [1, 3, 5].map(i => parseInt($("#mbColor").value.substr(i, 2), 16)),
                                        brightness: +$("#mbBri").value, speed: +$("#mbSp").value } });
 async function save() {
-  status("저장 중…");
+  status("적용 중…");
   const r = await fetch("/api/save", { method: "POST", body: JSON.stringify({ config: currentConfig(), theme: S.theme }) });
   const j = await r.json();
-  if (j.ok) { dirty = false; status("저장됨 — 케이스 화면에 곧 반영됩니다"); if (recKind === "history") loadRecords(); } else status("저장 실패: " + (j.error || r.status));
+  if (j.ok) { dirty = false; status("적용됨"); if (recKind === "history") loadRecords(); } else status("적용 실패: " + (j.error || r.status));
 }
 
 // ---------- records ----------
@@ -460,7 +460,7 @@ async function loadRecords() {
   const j = await (await fetch("/api/records")).json();
   const list = j[recKind] || [], el = $("#reclist"); el.innerHTML = "";
   $("#tabPresets").classList.toggle("on", recKind === "presets"); $("#tabHistory").classList.toggle("on", recKind === "history");
-  if (!list.length) { el.innerHTML = `<div class="empty">${recKind === "presets" ? "기록이 없습니다. 이름을 입력하고 '현재 설정 기록'을 누르세요." : "아직 저장한 적이 없습니다."}</div>`; return; }
+  if (!list.length) { el.innerHTML = `<div class="empty">${recKind === "presets" ? "기록이 없습니다. 이름을 입력하고 '현재 설정 기록'을 누르세요." : "아직 적용한 적이 없습니다."}</div>`; return; }
   for (const r of list) {
     const d = document.createElement("div"); d.className = "rec";
     const info = document.createElement("div"); info.innerHTML = `<div class="nm"></div><div class="tm"></div>`;
@@ -484,7 +484,7 @@ async function loadRecord(r) {
   if (c.off_when_locked != null) $("#offLocked").checked = c.off_when_locked;
   if (c.off_when_display_off != null) $("#offDisplay").checked = c.off_when_display_off;
   sel = null; markDirty(); renderList(); renderProps(); scheduleRender(10);
-  status(`'${r.name || r.saved_at}' 불러옴 — 저장을 눌러야 케이스 화면에 적용됩니다`);
+  status(`'${r.name || r.saved_at}' 불러옴 — 적용을 눌러야 반영됩니다`);
 }
 $("#recSave").onclick = async () => {
   const name = $("#recName").value.trim();
@@ -550,14 +550,14 @@ $("#cropApply").onclick = async () => {
   $("#cropDlg").classList.remove("open"); status("배경 업로드 중… (원본에서 고품질로 자르는 중)");
   const r = await fetch("/api/background?" + q, { method: "POST", body: CROP.file });
   const j = await r.json();
-  if (j.path) { pushHistory(); S.theme.background = { path: j.path }; markDirty(); scheduleRender(10); status("배경 적용됨 — 저장을 눌러야 케이스 화면에 반영됩니다"); }
+  if (j.path) { pushHistory(); S.theme.background = { path: j.path }; markDirty(); scheduleRender(10); status("배경 적용됨 — 적용을 눌러야 반영됩니다"); }
   else status("업로드 실패: " + j.error);
 };
 
 // ---------- events ----------
 document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => newWidget(b.dataset.add));
 $("#undo").onclick = undo; $("#redo").onclick = redo; $("#save").onclick = save;
-$("#reload").onclick = () => { if (!dirty || confirm("저장하지 않은 변경을 버릴까요?")) load(); };
+$("#reload").onclick = () => { if (!dirty || confirm("적용하지 않은 변경을 버릴까요?")) load(); };
 $("#brightness").oninput = () => { $("#bVal").textContent = $("#brightness").value; markDirty(); };
 ["#rotate", "#interval", "#offLocked", "#offDisplay", "#clOn", "#clSrc", "#clColor", "#mbOn", "#mbDark", "#mbEff", "#mbColor"].forEach(s => $(s).onchange = markDirty);
 $("#mbBri").oninput = () => { $("#mbBriVal").textContent = $("#mbBri").value; markDirty(); };
