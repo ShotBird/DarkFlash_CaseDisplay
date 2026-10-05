@@ -2,7 +2,7 @@
  "theme": "theme\\theme.json",
  "interval_seconds": 2.0,
  "keepalive_seconds": 20,
- "brightness": 58,
+ "brightness": 28,
  "rotate": 270,
  "jpeg_quality": 95,
  "jpeg_max_bytes": 140000,
@@ -10,7 +10,7 @@
  "off_when_locked": true,
  "off_when_display_off": true,
  "cooler": {
-  "enabled": false,
+  "enabled": true,
   "source": "CPU Temperature",
   "icons": [
    "cpu",
@@ -32,8 +32,8 @@
    255,
    255
   ],
-  "brightness": 0,
-  "speed": 5,
+  "brightness": 1,
+  "speed": 1,
   "off_when_dark": true
  }
 }
