@@ -82,8 +82,38 @@ def _path():
     raise OSError("mobo RGB controller 048D:5711 not found")
 
 
+def _lamparray(rgb):
+    """Windows LampArray interface (usage page 0x59) of the same chip.
+    09-29: after a boot without GCC, Windows Dynamic Lighting (background controller) held the chip in host mode;
+    the chip then ignores CC 20 and keeps the LampArray color (stuck white full). CC 20 alone stopped working,
+    LampArray host mode + range update worked (board went dark). So every state is also sent here:
+    AutonomousMode=0, then LampRangeUpdate (report 5: flags=1, lamps 0..0 = all, R G B intensity)."""
+    for d in hid.enumerate(VID, PID):
+        if d["usage_page"] == 0x59:
+            h = hid.device(); h.open_path(d["path"])
+            try:
+                h.send_feature_report([6, 0]); time.sleep(0.1)
+                r, g, b = rgb
+                h.send_feature_report([5, 1, 0, 0, 0, 0, r, g, b, 255 if (r or g or b) else 0])
+            finally:
+                h.close()
+            return
+
+
+def _lamp_rgb(effect, color=(255, 255, 255), brightness=0, speed=5):
+    """LampArray has no effects: solid color dimmed by the GCC level; off = black."""
+    if effect == "off":
+        return (0, 0, 0)
+    k = LEVEL[_clamp(brightness, 0, 8)] / 255
+    return tuple(int(_clamp(v, 0, 255) * k) for v in color)
+
+
 def apply(effect, color=(255, 255, 255), brightness=0, speed=5):
     pkt = effect_packet(effect, color, brightness, speed)          # validate before touching the device
+    try:
+        _lamparray(_lamp_rgb(effect, color, brightness, speed))
+    except Exception:
+        pass
     d = hid.device(); d.open_path(_path())
     try:
         d.send_feature_report([RID, 0x60] + [0] * 62)
@@ -117,14 +147,25 @@ class MoboLed:
 
     def __init__(self, log, get_cfg, is_dark=lambda: False):
         self.log, self.get_cfg, self.is_dark, self.last = log, get_cfg, is_dark, None
-        self.stop, self.lock = threading.Event(), threading.Lock()
+        self.stop, self.lock, self.kick = threading.Event(), threading.Lock(), threading.Event()
+        self.resend = []
         threading.Thread(target=self._run, name="mobo_led", daemon=True).start()
 
     def _send(self, want):
         with self.lock:
             fw = apply(*want)
             self.last = want
+            now = time.time()
+            self.resend = [now + t for t in (0.7, 2.0)]   # LampArray color only, guards against Windows re-grab
         self.log(f"mobo RGB {want[0]} color={list(want[1])} level={want[2]} speed={want[3]} ({fw})")
+
+    def poke(self):
+        self.kick.set()
+
+    def burst(self):
+        """Lock/unlock/monitor event: send now, then 3 re-sends within 4 s to beat Windows Dynamic Lighting,
+        then nothing (no periodic USB traffic)."""
+        self.kick.set()     # 09-29 v2: only check now; re-sends happen only after a real state change (_send)
 
     def suspend_now(self):
         """Called on the power-watch thread right before Windows sleeps: turn off at once."""
@@ -142,13 +183,25 @@ class MoboLed:
             want = wanted((self.get_cfg() or {}).get("mobo", {}), dark=bool(self.is_dark()))
             if want is None:
                 self.last = None
+            elif self.resend and now >= self.resend[0]:   # burst after lock/unlock/monitor event (Windows grabs the chip)
+                self.resend.pop(0)
+                if want == self.last:     # same state: LampArray color only, no CC 20 effect restart (that blinked)
+                    try:
+                        with self.lock:
+                            _lamparray(_lamp_rgb(*want))
+                    except Exception:
+                        pass
+                else:
+                    self.last = None
+                continue
             elif want != self.last:
                 try:
                     self._send(want)
                 except Exception as e:
                     self.log(f"mobo RGB error: {e} - retry in 10s")
                     self.stop.wait(10); continue
-            self.stop.wait(2)
+            nxt = (self.resend[0] - time.time()) if self.resend else 2
+            self.kick.wait(max(0.05, min(2, nxt))); self.kick.clear()   # poke()/burst() wake at once
 
 
 if __name__ == "__main__":      # manual test: python mobo_led.py <effect> [r g b] [level 0-8] [speed 0-9]
