@@ -71,8 +71,31 @@ def restart_self(lcd):
     os._exit(0)
 
 
+def _wts_session_flags():
+    """WTSINFOEX level 1 SessionFlags of this session: 0 = locked, 1 = unlocked, None = query failed."""
+    w = ctypes.windll.wtsapi32
+    w.WTSQuerySessionInformationW.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.c_int,
+                                              ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.DWORD)]
+    buf, n = ctypes.c_void_p(), wintypes.DWORD()
+    if not w.WTSQuerySessionInformationW(None, 0xFFFFFFFF, 25, ctypes.byref(buf), ctypes.byref(n)):  # WTSSessionInfoEx
+        return None
+    try:
+        return ctypes.cast(buf, ctypes.POINTER(ctypes.c_long))[3]   # Level, SessionId, SessionState, SessionFlags
+    finally:
+        w.WTSFreeMemory(buf)
+
+
 def session_locked():
-    """Input desktop cannot be opened while the lock screen (Winlogon desktop) is active."""
+    """10-08: the session's own lock state (WTS SessionFlags), not the input desktop.
+    The old OpenInputDesktop check missed real Win+L locks on this build (lock events 10-04 04:13, 10-05 02:28,
+    10-08 08:26 with the case screen and cooler left on) and fired on UAC prompts (secure desktop) instead,
+    blanking every light for ~3 s. Falls back to the input-desktop check only if the WTS query fails."""
+    try:
+        f = _wts_session_flags()
+        if f in (0, 1):
+            return f == 0
+    except Exception:
+        pass
     user32.OpenInputDesktop.restype = wintypes.HANDLE
     h = user32.OpenInputDesktop(0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
     if not h:
