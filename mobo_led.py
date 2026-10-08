@@ -100,31 +100,6 @@ def _lamparray(rgb):
             return
 
 
-LAMP_SOLID = ("off", "static")   # 10-08: only these go through LampArray host mode
-
-
-def _lamparray_release():
-    """Hand the chip back to its own effects (LampArray AutonomousMode=1) so CC 20 effects run.
-    10-08: host mode (AutonomousMode=0) made the chip ignore CC 20, so pulse/flash/dflash/cycle all showed as a solid color."""
-    for d in hid.enumerate(VID, PID):
-        if d["usage_page"] == 0x59:
-            h = hid.device(); h.open_path(d["path"])
-            try:
-                h.send_feature_report([6, 1])
-            finally:
-                h.close()
-            return
-
-
-def _lamp_hold(effect, color=(255, 255, 255), brightness=0, speed=5):
-    """off/static: LampArray host mode + solid color (09-29 guard against Windows grabbing the chip).
-    Effects: release the chip so the CC 20 effect is what shows."""
-    if effect in LAMP_SOLID:
-        _lamparray(_lamp_rgb(effect, color, brightness, speed))
-    else:
-        _lamparray_release()
-
-
 def _lamp_rgb(effect, color=(255, 255, 255), brightness=0, speed=5):
     """LampArray has no effects: solid color dimmed by the GCC level; off = black."""
     if effect == "off":
@@ -136,7 +111,7 @@ def _lamp_rgb(effect, color=(255, 255, 255), brightness=0, speed=5):
 def apply(effect, color=(255, 255, 255), brightness=0, speed=5):
     pkt = effect_packet(effect, color, brightness, speed)          # validate before touching the device
     try:
-        _lamp_hold(effect, color, brightness, speed)
+        _lamparray(_lamp_rgb(effect, color, brightness, speed))
     except Exception:
         pass
     d = hid.device(); d.open_path(_path())
@@ -213,7 +188,7 @@ class MoboLed:
                 if want == self.last:     # same state: LampArray color only, no CC 20 effect restart (that blinked)
                     try:
                         with self.lock:
-                            _lamp_hold(*want)   # 10-08: effects re-release instead of re-grabbing as solid color
+                            _lamparray(_lamp_rgb(*want))
                     except Exception:
                         pass
                 else:
